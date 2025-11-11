@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72" fill="none">
+  <rect width="72" height="72" rx="12" fill="#0F172A"/>
+  <g transform="translate(12,12)">
+    <rect x="6" y="6" width="36" height="36" rx="6" fill="#0EA5A4"/>
+    <circle cx="24" cy="18" r="6" fill="#071124"/>
+    <rect x="14" y="28" width="20" height="6" rx="2" fill="#071124"/>
+    <!-- mortarboard -->
+    <polygon points="6,4 30,4 24,0 0,0" fill="#071124" transform="translate(6,-8) scale(0.9)" />
+  </g>
+</svg>

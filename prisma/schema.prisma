@@ -1,0 +1,124 @@
+// Prisma schema for Gradely (SQLite)
+// Includes NextAuth models and app models
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth core models
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(STUDENT)
+
+  accounts      Account[]
+  sessions      Session[]
+  submissions   Submission[]
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// App models
+model Assignment {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  language    Language
+  createdAt   DateTime @default(now())
+
+  submissions Submission[]
+}
+
+enum Language {
+  typescript
+  javascript
+  python
+  java
+  c
+  html
+}
+
+model Submission {
+  id           String    @id @default(cuid())
+  assignmentId String
+  userId       String?
+  language     Language
+  code         String
+  createdAt    DateTime  @default(now())
+
+  // Review snapshot
+  reviewSummary   String   @default("")
+  reviewIssuesJSON String   @default("")
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id])
+
+  runs Run[]
+}
+
+model Run {
+  id           String   @id @default(cuid())
+  submissionId String
+  status       RunStatus @default(PENDING)
+  logs         String   @default("")
+  metricsJSON  String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PASSED
+  FAILED
+}

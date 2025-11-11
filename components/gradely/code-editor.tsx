@@ -18,7 +18,7 @@ export type EditorHandle = {
 }
 
 export function CodeEditor(props: {
-  language: "typescript" | "javascript" | "python" | "java"
+  language: string
   initialValue: string
   storageKey: string
   onMount?: (handle: EditorHandle) => void
@@ -121,7 +121,11 @@ export function CodeEditor(props: {
         ? "javascript"
         : props.language === "python"
           ? "python"
-          : "java"
+          : props.language === "java"
+            ? "java"
+            : props.language === "c"
+              ? "cpp"
+              : "html"
 
   return (
     <div className="rounded-xl border overflow-hidden glass-surface">

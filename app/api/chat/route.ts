@@ -1,53 +1,39 @@
 import type { NextRequest } from "next/server"
-import { cookies } from "next/headers"
-import { generateText } from "ai"
+import { callGroqModel } from "../../../lib/groq"
+import { sanitizePayload } from "../../../lib/model-client"
+import { getSession, setSession } from "../../../lib/session"
+import { closestFreeModel, describeModel } from "../../../lib/groq-free"
 
-// Simple in-memory session config for demo purposes.
-// In production, persist via an integration (e.g., Edge Config) with proper encryption.
-type SessionConfig = {
-  hfKey?: string
-}
-const sessions = new Map<string, SessionConfig>()
-
-function getOrCreateSessionId() {
-  const jar = cookies()
-  const existing = jar.get("gradelySession")?.value
-  if (existing) return existing
-  const sid = crypto.randomUUID()
-  // Set a cookie for session continuity
-  // 7 days, httpOnly off because Next.js constraints; adjust as needed
-  jar.set("gradelySession", sid, { path: "/", maxAge: 60 * 60 * 24 * 7 })
-  return sid
+function mask(k?: string | null) {
+  if (!k) return "not set"
+  const s = String(k)
+  if (s.length <= 8) return "••••"
+  return `${s.slice(0, 4)}••••${s.slice(-4)}`
 }
 
-function getSession(): { id: string; cfg: SessionConfig } {
-  const id = getOrCreateSessionId()
-  if (!sessions.has(id)) sessions.set(id, {})
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  return { id, cfg: sessions.get(id)! }
-}
+// Session helpers are centralized in lib/session so all routes share hfKey
 
 function parseIntent(
   message: string,
 ):
-  | { kind: "getKey"; model: "open-perplexity" }
-  | { kind: "setKey"; model: "open-perplexity"; key: string }
+  | { kind: "getKey"; model: "groq" }
+  | { kind: "setKey"; model: "groq"; key: string }
   | { kind: "runFolder" }
   | { kind: "query"; text: string } {
   const m = message.trim()
 
   // Get key
-  if (/get\s+the\s+current\s+api\s+key.*open-?perplexity/i.test(m) || /^get key .*open/i.test(m)) {
-    return { kind: "getKey", model: "open-perplexity" }
+  if (/get\s+the\s+current\s+api\s+key.*groq/i.test(m) || /^get key .*groq/i.test(m)) {
+    return { kind: "getKey", model: "groq" }
   }
 
   // Set key
   const setKey =
-    m.match(/update\s+the\s+open-?perplexity\s+api\s+key\s+to\s+(.+)/i) ||
-    m.match(/set\s+key\s+open-?perplexity\s*:\s*(.+)/i)
+    m.match(/update\s+the\s+groq\s+api\s+key\s+to\s+(.+)/i) ||
+    m.match(/set\s+key\s+groq\s*:\s*(.+)/i)
   if (setKey && setKey[1]) {
     const key = setKey[1].trim().replace(/^["']|["']$/g, "")
-    return { kind: "setKey", model: "open-perplexity", key }
+    return { kind: "setKey", model: "groq", key }
   }
 
   // Run folder (UI handled client-side, but we acknowledge)
@@ -59,58 +45,12 @@ function parseIntent(
   return { kind: "query", text: m }
 }
 
-async function callOpenPerplexity(prompt: string, hfKey: string | undefined) {
-  // Prefer a configurable Space endpoint; fallback to a reasonable default.
-  const url =
-    process.env.HUGGINGFACE_OPEN_PERPLEXITY_URL ||
-    "https://huggingface.co/spaces/vedantdere/open-perplexity/api/predict"
-
-  if (!hfKey) {
-    return { ok: false, error: "No Hugging Face token is set for open-perplexity." }
-  }
-
-  try {
-    // Many Spaces use a Gradio-style payload: { data: [input] }
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${hfKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ data: [prompt] }),
-    })
-    if (!res.ok) {
-      const errText = await res.text()
-      return { ok: false, error: `open-perplexity error: ${res.status} ${errText}` }
-    }
-    const json = await res.json()
-    // Try to extract a textual response from common Gradio shapes
-    const reply =
-      (Array.isArray(json?.data) &&
-        json.data.map((d: any) => (typeof d === "string" ? d : JSON.stringify(d))).join("\n")) ||
-      json?.text ||
-      JSON.stringify(json)
-    return { ok: true, text: String(reply) }
-  } catch (err: any) {
-    return { ok: false, error: `Failed to reach open-perplexity: ${err?.message || String(err)}` }
-  }
-}
-
-async function fallbackAi(prompt: string) {
-  try {
-    const { text } = await generateText({
-      model: "openai/gpt-5-mini",
-      prompt,
-    })
-    return { ok: true as const, text }
-  } catch (err: any) {
-    return { ok: false as const, error: `AI fallback failed: ${err?.message || String(err)}` }
-  }
-}
+// We'll call HF models server-side. Use per-session token if set, else global env HUGGINGFACE_API_KEY.
 
 export async function POST(req: NextRequest) {
-  const { id, cfg } = getSession()
-  const body = await req.json().catch(() => ({}))
+  const { id, cfg } = await getSession()
+  const rawBody = await req.json().catch(() => ({}))
+  const body = sanitizePayload(rawBody) || {}
   const message: string = (body?.message || "").toString()
   if (!message) {
     return new Response(JSON.stringify({ error: "Missing message" }), { status: 400 })
@@ -122,17 +62,17 @@ export async function POST(req: NextRequest) {
   if (intent.kind === "getKey") {
     const masked = cfg.hfKey ? `${mask(cfg.hfKey)}` : "not set"
     return Response.json({
-      reply: `The current API key for open-perplexity is ${masked}. Would you like to update it?`,
+      reply: `The current API key for Groq is ${masked}. Would you like to update it?`,
     })
   }
 
   if (intent.kind === "setKey") {
     if (!intent.key || intent.key.length < 8) {
-      return Response.json({ reply: "That key looks invalid. Please provide a valid Hugging Face token." })
+      return Response.json({ reply: "That key looks invalid. Please provide a valid Groq API key." })
     }
     cfg.hfKey = intent.key
-    sessions.set(id, cfg)
-    return Response.json({ reply: "API key updated successfully and is now active for open-perplexity." })
+    setSession(id, cfg)
+    return Response.json({ reply: "API key updated successfully and is now active for Groq." })
   }
 
   if (intent.kind === "runFolder") {
@@ -142,29 +82,37 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Query -> try open-perplexity first, then fallback to AI SDK
-  const opp = await callOpenPerplexity(intent.text, cfg.hfKey)
-  if (opp.ok) {
-    return Response.json({ reply: opp.text })
+  // Query via Groq models
+  const keyToUse = cfg.hfKey ?? process.env.GROQ_API_KEY
+  const models = [
+    process.env.CHAT_PRIMARY_MODEL || "llama-3.1-8b-instant",
+    process.env.CHAT_SECONDARY_MODEL || "mixtral-8x7b-32768",
+    process.env.CHAT_FALLBACK_MODEL || "llama-3.1-8b-instant",
+  ]
+  let replyText = ""
+  let lastErr = ""
+  let notice = ""
+  for (const m of models) {
+    const mapped = closestFreeModel(m)
+    if (mapped.switched && !notice) {
+      notice = `[Using free model] ${describeModel(mapped.info)}. ${mapped.reason || ""}`.trim()
+    }
+    const res = await callGroqModel(mapped.selected, intent.text, { maxTokens: 512 }, keyToUse)
+    if (res.ok) {
+      replyText = String(res.text || "")
+      lastErr = ""
+      break
+    } else {
+      lastErr = res.error || `Failed calling ${mapped.selected}`
+    }
   }
-  const fb = await fallbackAi(
-    `You are assisting with code errors, technical clarifications, and debugging. If the user shares code, analyze and explain. Query: ${intent.text}`,
-  )
-  if (fb.ok) {
-    return Response.json({
-      reply: `Note: open-perplexity was unavailable (${opp.error}). Returning a fallback answer.\n\n${fb.text}`,
-    })
+  if (replyText) {
+    const combined = notice ? `${notice}\n\n${replyText}` : replyText
+    return Response.json({ reply: combined })
   }
-  return new Response(
-    JSON.stringify({ error: `Both open-perplexity and fallback failed. ${opp.error}; ${fb.error}` }),
-    {
-      status: 502,
-    },
-  )
+
+  return new Response(JSON.stringify({ error: `All chat models failed: ${lastErr}` }), {
+    status: 502,
+  })
 }
 
-function mask(key: string) {
-  if (!key) return "not set"
-  if (key.length <= 8) return "••••"
-  return `${key.slice(0, 4)}••••${key.slice(-4)}`
-}

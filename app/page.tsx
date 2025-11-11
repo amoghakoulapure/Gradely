@@ -11,7 +11,7 @@ import { HistoryPanel, type Snapshot } from "@/components/gradely/history-panel"
 import { GradelyHeader } from "@/components/gradely/header"
 import { AIAssistant } from "@/components/gradely/ai-assistant"
 
-type Lang = "typescript" | "javascript" | "python" | "java"
+type Lang = "typescript" | "javascript" | "python" | "java" | "c" | "html"
 
 const DEFAULT_CODE: Record<Lang, string> = {
   typescript: `// Welcome to Gradely!
@@ -50,7 +50,29 @@ public class Main {
   public static void main(String[] args) {
     System.out.println(add(2, 3));
   }
+}`,
+  c: `// Welcome to Gradely!
+// Write C here and click "Analyze Code" for instant AI feedback.
+
+#include <stdio.h>
+
+int add(int a, int b){
+  return a + b;
 }
+
+int main(){
+  printf("%d", add(2,3));
+  return 0;
+}`,
+  html: `<!-- Welcome to Gradely!
+Write HTML here and click "Analyze Code" for instant AI feedback. -->
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Gradely</title></head>
+  <body>
+    <h1>Hello, world</h1>
+  </body>
+</html>
 `,
 }
 
@@ -105,6 +127,10 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, language }),
       })
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "")
+        throw new Error(`Review API failed ${res.status}: ${txt}`)
+      }
       const data: ReviewResult = await res.json()
       setReview(data)
       setIssues(data.issues ?? [])
@@ -199,6 +225,8 @@ export default function HomePage() {
                   <SelectItem value="javascript">JavaScript</SelectItem>
                   <SelectItem value="python">Python</SelectItem>
                   <SelectItem value="java">Java</SelectItem>
+                  <SelectItem value="c">C</SelectItem>
+                  <SelectItem value="html">HTML</SelectItem>
                 </SelectContent>
               </Select>
               <div className="text-sm text-muted-foreground hidden md:block">Write code and get instant AI review</div>

@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+import Image from "next/image"
 import { useEffect, useState } from "react"
 
 export function GradelyHeader() {
@@ -24,20 +25,28 @@ export function GradelyHeader() {
       ].join(" ")}
     >
       <div className="mx-auto w-full max-w-7xl px-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div aria-hidden="true" className="size-6 rounded-md bg-primary/90" />
-          <span className="font-semibold">Gradely</span>
+        <div className="flex items-center gap-3">
+          {/* Logo image: place your logo at public/gradely-logo.png */}
+          <div className="flex items-center gap-3">
+            <Image src="/gradely-logo.svg" alt="Gradely logo" width={36} height={36} className="rounded-md" />
+            <span className="font-semibold">Gradely</span>
+          </div>
         </div>
         <nav className="flex items-center gap-2">
-          <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Docs
+          <Link href="/assignments" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Assignments
           </Link>
-          <Link href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Roadmap
+          <Link href="/teacher" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Teacher
           </Link>
-          <Button size="sm" className="glass-button">
-            Open Editor
-          </Button>
+          <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Login
+          </Link>
+          <Link href="/">
+            <Button size="sm" className="glass-button">
+              Open Editor
+            </Button>
+          </Link>
         </nav>
       </div>
     </header>

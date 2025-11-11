@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 
 export type Snapshot = {
   id: string
-  language: "typescript" | "javascript" | "python" | "java"
+  language: string
   code: string
   createdAt: number
 }

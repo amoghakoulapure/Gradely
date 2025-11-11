@@ -1,30 +1,36 @@
-# Code editor focus
+# Gradely – AI Code Review (Next.js)
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+## Quickstart
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/amoghabiets-projects/v0-code-editor-focus)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/hsA4fAhrVdK)
+- Install deps
+  - pnpm i (or npm i / yarn)
+- Add env
+  - Create `.env.local` with:
+    - HUGGINGFACE_API_KEY=your_hf_token
+- Run
+  - pnpm dev (or npm run dev / yarn dev)
+  - Open http://localhost:3000
 
-## Overview
+## Pages
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+- `/` – Editor with AI review and assistant
+- `/login` – Mock login (teacher/student). No real auth yet.
+- `/teacher` – Create assignments and view list
+- `/assignments` – Student assignment list
+- `/assignments/[id]` – Assignment detail with editor and submit
 
-## Deployment
+## APIs
 
-Your project is live at:
+- `POST /api/review` – Code review. Uses HF StarCoder. Requires `HUGGINGFACE_API_KEY`.
+- `POST /api/assistant` – AI assistant. Uses HF StarCoder.
+- `GET/POST /api/assignments` – List/create assignments (in-memory)
+- `GET/POST /api/assignments/[id]/submissions` – List/create submissions (in-memory)
 
-**[https://vercel.com/amoghabiets-projects/v0-code-editor-focus](https://vercel.com/amoghabiets-projects/v0-code-editor-focus)**
+## Environment
 
-## Build your app
+- Required: `HUGGINGFACE_API_KEY` (HF Inference API). Get one at https://huggingface.co/settings/tokens
 
-Continue building your app on:
+## Notes
 
-**[https://v0.app/chat/projects/hsA4fAhrVdK](https://v0.app/chat/projects/hsA4fAhrVdK)**
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+- Execution/grading sandbox is not included yet (editor-only review).
+- Next steps: real auth, persistent DB, queue-based grader.
