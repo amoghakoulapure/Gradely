@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Gradely – AI Code Review (Next.js)
 
 ## Quickstart
@@ -34,3 +35,7 @@
 
 - Execution/grading sandbox is not included yet (editor-only review).
 - Next steps: real auth, persistent DB, queue-based grader.
+=======
+# Gradely
+GRADELY is a browser-based AI-powered code review platform for students and instructors. Its primary goal is to streamline learning through instant code analysis, actionable feedback, and interactive assessment.
+>>>>>>> f3c99c8aa92911f10a37886aebf9597cce2e7a3d
