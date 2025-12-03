@@ -1,25 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { prisma } from "../../../../../lib/db"
 import { sanitizePayload } from "../../../../../lib/model-client"
-import { callHfModel } from "../../../../../lib/hf"
+import { callGorqModel } from "../../../../../lib/gorq"
+import { getSupabaseServiceRoleClient } from "../../../../../lib/supabase"
+import { db as localDb } from "../../../../../lib/store"
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const assignmentId = params.id
-  const items = await prisma.submission.findMany({
-    where: { assignmentId },
-    orderBy: { createdAt: "desc" },
-  })
-  return NextResponse.json({ items })
+  const { id: assignmentId } = await params
+  const supabase = getSupabaseServiceRoleClient()
+  const { data, error } = await supabase
+    .from("submissions")
+    .select("*")
+    .eq("assignment_id", assignmentId)
+    .order("created_at", { ascending: false })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ items: data || [] })
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const assignmentId = params.id
+    const { id: assignmentId } = await params
     const raw = await req.json().catch(() => ({}))
     const body = sanitizePayload(raw) || {}
     const code = String(body.code || "")
     const language = String(body.language || "")
     const userEmail = body.userEmail ? String(body.userEmail) : undefined
+    const studentName = body.studentName ? String(body.studentName).trim() : undefined
 
     if (!code.trim()) return NextResponse.json({ error: "Missing code" }, { status: 400 })
     if (!language || !["typescript", "javascript", "python", "java", "c", "html"].includes(language)) {
@@ -48,11 +54,11 @@ ${code}
 ---
 `
 
-    const primary = await callHfModel("bigcode/starcoder2-7b", prompt, { max_new_tokens: 800 })
+    const primary = await callGorqModel("bigcode/starcoder2-7b", prompt, { max_new_tokens: 800 })
     let text = ""
     if (primary.ok) text = primary.text
     else {
-      const fb = await callHfModel("openai-community/gpt2", prompt, { max_new_tokens: 256 })
+      const fb = await callGorqModel("openai-community/gpt2", prompt, { max_new_tokens: 256 })
       text = fb.ok ? fb.text : `Primary failed: ${primary.error}. Fallback failed: ${fb.error}`
     }
 
@@ -76,16 +82,54 @@ ${code}
       summary = `AI returned unexpected format. Here is a brief summary: ${text.slice(0, 300)}`
       issues = []
     }
+    // Persist into Supabase `submissions` table (server-side service role)
+    const supabase = getSupabaseServiceRoleClient()
+    // Ensure assignment exists in Supabase (some assignments are stored in-memory only)
+    try {
+      const { data: existingAssignment, error: asnErr } = await supabase.from("assignments").select("*").eq("id", assignmentId).maybeSingle()
+      if (asnErr) {
+        console.error("Supabase assignments lookup error:", asnErr)
+      }
+      if (!existingAssignment) {
+        // Try to get assignment metadata from local in-memory DB
+        const localAssignment = localDb.getAssignment(assignmentId)
+        const assignPayload: any = {
+          id: assignmentId,
+          title: localAssignment?.title || `Assignment ${assignmentId}`,
+          description: localAssignment?.description || null,
+          language: localAssignment?.language || language,
+        }
+        const { data: createdAsn, error: createAsnErr } = await supabase.from("assignments").insert([assignPayload]).select().limit(1).single()
+        if (createAsnErr) {
+          console.error("Failed to create assignment in Supabase:", createAsnErr)
+        } else {
+          console.log("Created assignment in Supabase for id", assignmentId)
+        }
+      }
+    } catch (e) {
+      console.error("Assignment existence check failed:", e)
+    }
+    const insertPayload: any = {
+      assignment_id: assignmentId,
+      language,
+      code,
+      review_summary: summary,
+      review_issues: issues,
+    }
+    if (userEmail) insertPayload.user_email = userEmail
+    if (studentName) insertPayload.student_name = studentName
+    // Persist submission (assumes `student_name` column exists in the DB)
+    const { data: created, error: insertErr } = await supabase
+      .from("submissions")
+      .insert([insertPayload])
+      .select()
+      .limit(1)
+      .single()
 
-    const created = await prisma.submission.create({
-      data: {
-        assignmentId,
-        language,
-        code,
-        reviewSummary: summary,
-        reviewIssuesJSON: JSON.stringify(issues),
-      },
-    })
+    if (insertErr) {
+      console.error("Supabase insert error:", insertErr)
+      return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    }
 
     return NextResponse.json({
       ...created,

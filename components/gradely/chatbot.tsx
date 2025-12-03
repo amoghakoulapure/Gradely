@@ -163,19 +163,42 @@ export default function Chatbot() {
     }
 
     // Python via Pyodide
+    async function ensurePyodide() {
+      if (typeof window === "undefined") {
+        throw new Error("Pyodide can only be loaded in the browser")
+      }
+      type PyodideWindow = typeof window & {
+        __pyodide?: any
+        __pyodidePromise?: Promise<any>
+        loadPyodide?: (options?: Record<string, unknown>) => Promise<any>
+      }
+      const pyWindow = window as PyodideWindow
+      if (pyWindow.__pyodide) {
+        return pyWindow.__pyodide
+      }
+      if (!pyWindow.__pyodidePromise) {
+        pyWindow.__pyodidePromise = (async () => {
+          if (!pyWindow.loadPyodide) {
+            await new Promise<void>((resolve, reject) => {
+              const script = document.createElement("script")
+              script.src = "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"
+              script.async = true
+              script.onload = () => resolve()
+              script.onerror = () => reject(new Error("Failed to load Pyodide script"))
+              document.body.appendChild(script)
+            })
+          }
+          pyWindow.__pyodide = await pyWindow.loadPyodide?.({ stderr: () => {}, stdout: () => {} })
+          return pyWindow.__pyodide
+        })()
+      }
+      pyWindow.__pyodide = await pyWindow.__pyodidePromise
+      return pyWindow.__pyodide
+    }
+
     async function runPy() {
       if (pyFiles.length === 0) return
-      // Load Pyodide once
-      // @ts-ignore
-      if (!window.__pyodide) {
-        // @ts-ignore
-        window.loadPyodide =
-          window.loadPyodide || (await import("https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js")).loadPyodide
-        // @ts-ignore
-        window.__pyodide = await window.loadPyodide({ stderr: (s: string) => {}, stdout: (s: string) => {} })
-      }
-      // @ts-ignore
-      const pyodide = window.__pyodide
+      const pyodide = await ensurePyodide()
       for (const f of pyFiles) {
         const code = await f.text()
         try {

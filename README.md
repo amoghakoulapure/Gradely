@@ -7,7 +7,8 @@
   - pnpm i (or npm i / yarn)
 - Add env
   - Create `.env.local` with:
-    - HUGGINGFACE_API_KEY=your_hf_token
+    - GORQ_API_KEY=your_gorq_token
+    - (optional) GORQ_API_URL=https://api.gorq.ai/v1
 - Run
   - pnpm dev (or npm run dev / yarn dev)
   - Open http://localhost:3000
@@ -15,21 +16,21 @@
 ## Pages
 
 - `/` – Editor with AI review and assistant
-- `/login` – Mock login (teacher/student). No real auth yet.
 - `/teacher` – Create assignments and view list
 - `/assignments` – Student assignment list
 - `/assignments/[id]` – Assignment detail with editor and submit
 
 ## APIs
 
-- `POST /api/review` – Code review. Uses HF StarCoder. Requires `HUGGINGFACE_API_KEY`.
-- `POST /api/assistant` – AI assistant. Uses HF StarCoder.
+-- `POST /api/review` – Code review. Uses configured model provider (Gorq by default). Requires `GORQ_API_KEY`.
+-- `POST /api/assistant` – AI assistant. Uses configured model provider (Gorq by default).
 - `GET/POST /api/assignments` – List/create assignments (in-memory)
 - `GET/POST /api/assignments/[id]/submissions` – List/create submissions (in-memory)
 
 ## Environment
 
-- Required: `HUGGINGFACE_API_KEY` (HF Inference API). Get one at https://huggingface.co/settings/tokens
+- Required: `GORQ_API_KEY`. Set this to your Gorq API key.
+- Optional: `GORQ_API_URL` if you're using a custom Gorq endpoint. Default: `https://api.gorq.ai/v1`
 
 ## Notes
 

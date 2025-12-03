@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { use, useEffect, useMemo, useRef, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { CodeEditor, type EditorHandle } from "@/components/gradely/code-editor"
 import { ReviewPanel, type ReviewIssue, type ReviewResult } from "@/components/gradely/review-panel"
 
@@ -16,13 +16,14 @@ const DEFAULT_CODE: Record<string, string> = {
   html: "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>Gradely</title></head><body><h1>Hello</h1></body></html>\n",
 }
 
-export default function AssignmentDetail({ params }: { params: { id: string } }) {
-  const id = params.id
+export default function AssignmentDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [assignment, setAssignment] = useState<any>(null)
   const [language, setLanguage] = useState<string>("typescript")
   const [review, setReview] = useState<ReviewResult | null>(null)
   const [issues, setIssues] = useState<ReviewIssue[]>([])
   const [loading, setLoading] = useState(false)
+  const [studentName, setStudentName] = useState<string>("")
   const editorRef = useRef<EditorHandle | null>(null)
 
   useEffect(() => {
@@ -34,6 +35,33 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
       }
     })
   }, [id])
+
+  // If a `submissionId` is present in the query, fetch that submission and open its review
+  useEffect(() => {
+    try {
+      const params = new URL(window.location.href).searchParams
+      const submissionId = params.get("submissionId")
+      if (!submissionId) return
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/submissions/${submissionId}`)
+          if (!res.ok) return
+          const data = await res.json()
+          if (data?.code && editorRef.current) {
+            editorRef.current.setValue(data.code)
+          }
+          // If review present, set review panel
+          if (data?.reviewSummary) {
+            setReview({ summary: data.reviewSummary, issues: JSON.parse(data.reviewIssuesJSON || "[]") })
+            setIssues(JSON.parse(data.reviewIssuesJSON || "[]"))
+            editorRef.current?.setMarkers(JSON.parse(data.reviewIssuesJSON || "[]"))
+          }
+        } catch (e) {
+          // ignore
+        }
+      })()
+    } catch (e) {}
+  }, [])
 
   const initialCode = useMemo(() => DEFAULT_CODE[language] || "", [language])
 
@@ -47,7 +75,7 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
       const res = await fetch(`/api/assignments/${id}/submissions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, language }),
+        body: JSON.stringify({ code, language, studentName }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data?.error || "Failed")
@@ -81,6 +109,10 @@ export default function AssignmentDetail({ params }: { params: { id: string } })
           />
         </div>
         <div className="md:col-span-1 space-y-3">
+          <div>
+            <label className="text-sm font-medium">Student name</label>
+            <Input placeholder="Student name" value={studentName} onChange={(e) => setStudentName((e.target as HTMLInputElement).value)} />
+          </div>
           <Button onClick={submit} disabled={loading}>{loading ? "Submitting…" : "Submit"}</Button>
           <ReviewPanel review={review} issues={issues} onJumpToLine={(line) => editorRef.current?.revealLine(line)} />
         </div>

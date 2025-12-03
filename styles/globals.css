@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import 'tailwindcss/index.css';
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
@@ -121,5 +121,168 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .workspace-card {
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 280ms ease, border-color 280ms ease, transform 240ms ease;
+  }
+  .workspace-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at top right, color-mix(in srgb, var(--primary) 20%, transparent), transparent 55%);
+    opacity: 0;
+    transition: opacity 320ms ease;
+  }
+  main[data-assistant-open="true"] .workspace-card {
+    box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    transform: translateY(-2px);
+  }
+  main[data-assistant-open="true"] .workspace-card::after {
+    opacity: 0.6;
+  }
+
+  .toolbar-resize {
+    transition: gap 220ms ease;
+  }
+  .toolbar-actions {
+    transition: all 220ms ease;
+  }
+  main[data-assistant-open="true"] .toolbar-actions {
+    width: 100%;
+  }
+
+  .assistant-action-button {
+    transition: transform 180ms ease, box-shadow 220ms ease, padding 220ms ease, font-size 220ms ease;
+  }
+  .assistant-action-button-compact {
+    padding-inline: 0.85rem;
+    font-size: 0.85rem;
+  }
+  .assistant-action-button:focus-visible {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 60%, transparent);
+    transform: translateY(-1px);
+  }
+
+  .panel-resize {
+    transition: grid-template-columns 280ms ease, gap 220ms ease;
+  }
+
+  .assistant-shell {
+    animation: assistant-panel-idle 8s ease-in-out infinite;
+  }
+  .assistant-shell[data-open="true"] {
+    animation: assistant-panel-enter 360ms ease forwards;
+  }
+}
+
+@layer utilities {
+  .logo-orbit {
+    animation: logo-float 6s ease-in-out infinite;
+    will-change: transform;
+  }
+
+  .btn-animate {
+    transition: transform 120ms ease, box-shadow 200ms ease, background-color 200ms ease;
+  }
+  .btn-animate:hover {
+    transform: translateY(-1px) scale(1.01);
+  }
+  .btn-animate:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .btn-ignite {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0.25);
+    animation: button-pulse 3s ease-in-out infinite;
+  }
+
+  .fade-in-soft {
+    animation: fade-in-up 420ms ease forwards;
+  }
+
+  .review-fade {
+    animation: fade-in-up 360ms ease both;
+  }
+
+  .gradely-spinner {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    border: 2px solid color-mix(in srgb, var(--primary), transparent 60%);
+    border-top-color: var(--primary-foreground);
+    animation: spin 600ms linear infinite;
+    display: inline-block;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+  }
+}
+
+@keyframes logo-float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(1deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+@keyframes button-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(99, 102, 241, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.25);
+  }
+}
+
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes assistant-panel-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes assistant-panel-idle {
+  0% {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0);
+  }
+  50% {
+    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(99, 102, 241, 0);
   }
 }

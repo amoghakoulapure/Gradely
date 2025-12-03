@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { prisma } from "../../../../../lib/db"
+import { getSupabaseServiceRoleClient } from "../../../../../lib/supabase"
 
 export const dynamic = "force-dynamic"
 
@@ -12,7 +12,13 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
       const encoder = new TextEncoder()
       let attempts = 0
       async function tick() {
-        const run = await prisma.run.findUnique({ where: { id: runId } })
+        const svc = getSupabaseServiceRoleClient()
+        const { data: run, error } = await svc.from("runs").select("*").eq("id", runId).maybeSingle()
+        if (error) {
+          controller.enqueue(encoder.encode(`event: end\ndata: ${JSON.stringify({ error: error.message })}\n\n`))
+          controller.close()
+          return
+        }
         if (!run) {
           controller.enqueue(encoder.encode(`event: end\ndata: {"error":"not_found"}\n\n`))
           controller.close()

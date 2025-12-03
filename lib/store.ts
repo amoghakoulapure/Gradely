@@ -2,7 +2,7 @@ export type Assignment = {
   id: string
   title: string
   description?: string
-  language: "typescript" | "javascript" | "python" | "java"
+  language: "typescript" | "javascript" | "python" | "java" | "c" | "html"
   createdAt: number
 }
 
@@ -50,4 +50,23 @@ export const db = {
   addSubmission(s: Submission) {
     submissions.set(s.id, s)
   },
+}
+
+const defaultAssignments: Array<Omit<Assignment, "id" | "createdAt">> = [
+  {
+    title: "Calci",
+    description: "Build a basic calculator with add, subtract, multiply, divide.",
+    language: "typescript",
+  },
+  {
+    title: "FizzBuzz Refresher",
+    description: "Print numbers 1-100 replacing multiples of 3 and 5.",
+    language: "python",
+  },
+]
+
+if (!assignments.size) {
+  defaultAssignments.forEach((entry) => {
+    db.createAssignment(entry)
+  })
 }

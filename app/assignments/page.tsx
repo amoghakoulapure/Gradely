@@ -1,24 +1,32 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { GradelyHeader } from "@/components/gradely/header"
 import { Card } from "@/components/ui/card"
 
 type Assignment = {
   id: string
   title: string
   description?: string
-  language: "typescript" | "javascript" | "python" | "java"
+  language: "typescript" | "javascript" | "python" | "java" | "c" | "html"
   createdAt: number
 }
 
 export default function AssignmentsPage() {
   const [items, setItems] = useState<Assignment[]>([])
+  const router = useRouter()
   useEffect(() => {
-    fetch("/api/assignments").then((r) => r.json()).then((d) => setItems(d.items || [])).catch(() => setItems([]))
+    async function init() {
+      fetch("/api/assignments").then((r) => r.json()).then((d) => setItems(d.items || [])).catch(() => setItems([]))
+    }
+    init()
   }, [])
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-6 space-y-6">
+    <>
+      <GradelyHeader />
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 space-y-6">
       <h1 className="text-2xl font-semibold">Assignments</h1>
       <Card className="p-4">
         <ul className="space-y-2">
@@ -36,5 +44,6 @@ export default function AssignmentsPage() {
         </ul>
       </Card>
     </main>
+    </>
   )
 }

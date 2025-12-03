@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -43,6 +43,28 @@ export type EditorBridge = {
   clearHighlights?: () => void
 }
 
+async function copyCodeToClipboard(code: string) {
+  if (typeof window === "undefined") return
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(code)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = code
+  textarea.style.position = "fixed"
+  textarea.style.top = "-1000px"
+  textarea.style.left = "-1000px"
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  try {
+    document.execCommand("copy")
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 export function AIAssistant({
   open,
   onOpenChange,
@@ -63,6 +85,7 @@ export function AIAssistant({
   })
   const [showOptIn, setShowOptIn] = useState(false)
   const [preview, setPreview] = useState<{ suggestion: Suggestion; previewCode: string } | null>(null)
+  const scrollAnchorRef = useRef<HTMLDivElement | null>(null)
 
   // Keyboard shortcuts: toggle (Cmd/Ctrl+I), cycle (Alt+])
   useEffect(() => {
@@ -87,6 +110,10 @@ export function AIAssistant({
     "transition-all duration-300 ease-out",
     open ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4 pointer-events-none",
   )
+
+  useEffect(() => {
+    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+  }, [messages, loading])
 
   const submit = async () => {
     const trimmed = input.trim()
@@ -186,11 +213,12 @@ export function AIAssistant({
         "md:border-l md:border-[var(--border)]",
         "bg-[var(--card)] text-[var(--foreground)]",
         "rounded-none md:rounded-l-[var(--radius)]",
+        "flex flex-col max-h-[calc(100vh-6rem)] md:max-h-[calc(100vh-4rem)] overflow-hidden",
         containerClass,
       )}
       role="complementary"
     >
-      <Card className="h-full border-0 bg-transparent shadow-none">
+      <Card className="h-full flex flex-col border-0 bg-transparent shadow-none">
         <CardHeader className="flex items-center justify-between gap-2">
           <CardTitle className="text-balance">AI Assistant</CardTitle>
           <div className="flex items-center gap-2">
@@ -199,8 +227,8 @@ export function AIAssistant({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="h-[calc(100dvh-12rem)] md:h-[calc(100vh-12rem)] flex flex-col gap-3">
-          <ScrollArea className="flex-1 rounded-[var(--radius)] border border-[var(--border)] p-3">
+        <CardContent className="flex-1 flex flex-col gap-3 min-h-0">
+          <ScrollArea className="flex-1 min-h-0 rounded-[var(--radius)] border border-[var(--border)] p-3">
             <div className="space-y-3">
               {messages.map((m, i) => (
                 <div
@@ -235,9 +263,13 @@ export function AIAssistant({
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => {
+                              onClick={async () => {
                                 if (!s.apply?.code) return
-                                navigator.clipboard.writeText(s.apply.code).catch(() => {})
+                                try {
+                                  await copyCodeToClipboard(s.apply.code)
+                                } catch (error) {
+                                  console.error("Copy failed", error)
+                                }
                               }}
                             >
                               Copy
@@ -256,10 +288,10 @@ export function AIAssistant({
               ) : null}
               {!messages.length && (
                 <div className="text-sm text-[var(--muted-foreground)]">
-                  Tip: Ask “Summarize what my code does,” “Explain the error on line 12,” or “Write a test for the code
-                  above.”
+                  Tip: Ask “Summarize what my code does,” “Explain the error on line 12,” or “Write a test for the code above.”
                 </div>
               )}
+              <div ref={scrollAnchorRef} />
             </div>
           </ScrollArea>
           <div className="flex items-center gap-2">

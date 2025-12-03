@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export type ReviewIssue = {
   line: number
@@ -24,7 +25,7 @@ export function ReviewPanel(props: {
   const { review, issues } = props
 
   return (
-    <Card className="p-4 h-full">
+    <Card className="p-4 h-full flex flex-col">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">AI Review</h2>
         <Badge variant="outline">
@@ -36,37 +37,39 @@ export function ReviewPanel(props: {
         {review?.summary ?? 'Run "Analyze Code" to receive a summary and inline feedback.'}
       </div>
 
-      <div className="mt-4 space-y-3">
-        {issues.map((issue, idx) => (
-          <div key={idx} className="rounded-md border p-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">
-                Line {issue.line}{" "}
-                <Badge
-                  variant={
-                    issue.severity === "error" ? "destructive" : issue.severity === "warning" ? "secondary" : "outline"
-                  }
-                >
-                  {issue.severity}
-                </Badge>
+      <ScrollArea className="mt-4 flex-1">
+        <div className="space-y-3 pr-1">
+          {issues.map((issue, idx) => (
+            <div key={idx} className="rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">
+                  Line {issue.line}{" "}
+                  <Badge
+                    variant={
+                      issue.severity === "error" ? "destructive" : issue.severity === "warning" ? "secondary" : "outline"
+                    }
+                  >
+                    {issue.severity}
+                  </Badge>
+                </div>
+                {props.onJumpToLine && (
+                  <Button size="sm" variant="outline" onClick={() => props.onJumpToLine?.(issue.line)}>
+                    Jump
+                  </Button>
+                )}
               </div>
-              {props.onJumpToLine && (
-                <Button size="sm" variant="outline" onClick={() => props.onJumpToLine?.(issue.line)}>
-                  Jump
-                </Button>
+              <p className="mt-2 text-sm">{issue.message}</p>
+              {issue.suggestion && (
+                <div className="mt-2 rounded-sm bg-secondary p-2 text-xs">
+                  <span className="font-semibold">Suggestion: </span>
+                  <span className="text-pretty">{issue.suggestion}</span>
+                </div>
               )}
             </div>
-            <p className="mt-2 text-sm">{issue.message}</p>
-            {issue.suggestion && (
-              <div className="mt-2 rounded-sm bg-secondary p-2 text-xs">
-                <span className="font-semibold">Suggestion: </span>
-                <span className="text-pretty">{issue.suggestion}</span>
-              </div>
-            )}
-          </div>
-        ))}
-        {issues.length === 0 && <div className="text-sm text-muted-foreground">No issues to display yet.</div>}
-      </div>
+          ))}
+          {issues.length === 0 && <div className="text-sm text-muted-foreground">No issues to display yet.</div>}
+        </div>
+      </ScrollArea>
     </Card>
   )
 }

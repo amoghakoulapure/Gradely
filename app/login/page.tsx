@@ -1,24 +1,19 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useState, useEffect } from "react"
+// import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 
 type Role = "teacher" | "student"
 
-// Mocked client-side authentication function.
-// In production this would call your backend API over HTTPS.
+// Keep the mockAuthenticate for fallback/local dev (used when Supabase env is not set)
 async function mockAuthenticate(email: string, password: string, role: Role) {
-  // Simulate network latency
   await new Promise((res) => setTimeout(res, 600))
-
-  // Simple mocked credentials for demo purposes
   const valid =
     (role === "teacher" && email === "teacher@example.com" && password === "teacherpass") ||
     (role === "student" && email === "student@example.com" && password === "studentpass")
-
-  if (valid) {
-    return { ok: true, user: { email, role } }
-  }
+  if (valid) return { ok: true, user: { email, role } }
   const err: any = new Error("Invalid email, password, or role")
   err.code = 401
   throw err
@@ -47,6 +42,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [user, setUser] = useState<{ email: string; role: Role } | null>(null)
+  const router = useRouter()
 
   function validate() {
     setError(null)
@@ -68,12 +65,43 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
     try {
-      // NOTE: wrap backend calls in try/catch to handle network failures / rejections
-      const res = await mockAuthenticate(email.trim().toLowerCase(), password, role)
-      if (res?.ok) {
-        setSuccessMsg(`Welcome back, ${role === "teacher" ? "Teacher" : "Student"}!`)
-        setError(null)
-        // In production: redirect to role-specific dashboard, set auth cookie, etc.
+      // If Supabase is configured, use it for sign-in; otherwise fall back to mockAuthenticate for local testing
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+        if (signInError) throw signInError
+        // session may or may not be present depending on confirmation settings
+        const userData = data?.user
+        if (userData) {
+          setSuccessMsg(`Welcome back, ${userData.email}!`)
+          // If we have a session token, ensure the profile exists and fetch it
+          const { data: sessionData } = await supabase.auth.getSession()
+          const token = (sessionData as any)?.session?.access_token
+          if (token) {
+            try {
+              const profile = await safeApiCall('/api/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({}) })
+              const userRole = (profile?.role || 'student').toLowerCase()
+              setUser({ email: userData.email ?? '', role: userRole === 'teacher' ? 'teacher' : 'student' })
+              // Redirect by role
+              if (userRole === 'teacher') router.push('/teacher')
+              else router.push('/assignments')
+              return
+            } catch (e) {
+              console.error('Profile upsert/fetch failed', e)
+            }
+          }
+          setUser({ email: userData.email ?? "", role })
+          // Redirect to assignments by default
+          router.push('/assignments')
+        } else {
+          setSuccessMsg('Signed in; redirecting...')
+        }
+      } else {
+        const res = await mockAuthenticate(email.trim().toLowerCase(), password, role)
+        if (res?.ok) {
+          setSuccessMsg(`Welcome back, ${role === "teacher" ? "Teacher" : "Student"}!`)
+          setError(null)
+          setUser(res.user)
+        }
       }
     } catch (err: any) {
       // Show a user-friendly message; log details for debugging
@@ -85,6 +113,34 @@ export default function LoginPage() {
     }
   }
 
+  // Sync client-side user state with Supabase session on mount
+  useEffect(() => {
+    let mounted = true
+    async function fetch() {
+      try {
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+          const { data } = await supabase.auth.getSession()
+          if (!mounted) return
+          if (data?.session?.user) {
+            const token = (data as any)?.session?.access_token
+            // fetch profile
+            try {
+              const profile = await safeApiCall('/api/profiles', { headers: { Authorization: `Bearer ${token}` } })
+              const userRole = (profile?.role || 'STUDENT').toLowerCase()
+              setUser({ email: data.session.user.email ?? '', role: userRole === 'teacher' ? 'teacher' : 'student' })
+            } catch (e) {
+              setUser({ email: data.session.user.email ?? '', role: 'student' })
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    fetch()
+    return () => { mounted = false }
+  }, [])
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted p-4">
       <main className="w-full max-w-md bg-background/80 backdrop-blur rounded-lg shadow-md p-6">
@@ -93,7 +149,51 @@ export default function LoginPage() {
           {role === "teacher" ? "Teacher portal — access your class tools and reviews." : "Student portal — submit code and view feedback."}
         </p>
 
-        <form onSubmit={onSubmit} aria-describedby={error ? "login-error" : undefined}>
+        {/* If user is logged in, show the protected Choose Destination screen */}
+        {user ? (
+          <section aria-live="polite">
+            <h2 className="text-lg font-medium mb-3">Choose destination</h2>
+            <p className="text-sm text-muted-foreground mb-4">Welcome back, {user.role === 'teacher' ? 'Teacher' : 'Student'} ({user.email}).</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                className="flex-1 rounded-md bg-primary px-4 py-3 text-white font-medium"
+                onClick={() => router.push('/assignments')}
+              >
+                Go to Assignments
+              </button>
+              <button
+                className="flex-1 rounded-md border px-4 py-3 bg-white text-primary font-medium"
+                onClick={() => router.push('/')}
+              >
+                Go to Home
+              </button>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                className="text-sm text-muted-foreground underline rounded px-2 py-1"
+                onClick={async () => {
+                  // If Supabase is configured, sign out there; otherwise clear mock client state
+                  try {
+                    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+                      await supabase.auth.signOut()
+                    }
+                  } catch (e) {
+                    console.error('Sign out failed', e)
+                  }
+                  setUser(null)
+                  setSuccessMsg(null)
+                  setError(null)
+                  setEmail("")
+                  setPassword("")
+                  router.push('/login')
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </section>
+        ) : (
+          <form onSubmit={onSubmit} aria-describedby={error ? "login-error" : undefined}>
           <label className="block text-sm font-medium">Email</label>
           <input
             type="email"
@@ -148,11 +248,11 @@ export default function LoginPage() {
             </div>
           )}
 
-          {successMsg && (
-            <div role="status" className="text-green-600 text-sm mb-3">
-              {successMsg}
-            </div>
-          )}
+            {successMsg && (
+              <div role="status" className="text-green-600 text-sm mb-3">
+                {successMsg}
+              </div>
+            )}
 
           <div className="flex items-center justify-end gap-4">
             <button
@@ -164,8 +264,12 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Login"}
             </button>
           </div>
-        </form>
+          </form>
+        )}
 
+        <div className="mb-4">
+          <p className="text-sm text-muted-foreground">Don't have an account? <button className="text-primary underline" onClick={() => router.push('/signup')}>Sign up</button></p>
+        </div>
         <hr className="my-4" />
 
         <section className="text-xs text-muted-foreground">

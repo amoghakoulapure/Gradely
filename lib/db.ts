@@ -1,12 +1,7 @@
-import { PrismaClient } from "@prisma/client"
-
-// Prisma singleton for Next.js (avoid hot-reload instantiation)
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
-
-export const prisma =
-  globalForPrisma.prisma ||
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
-  })
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma
+// Prisma has been removed in favor of Supabase for this project.
+// If any code still imports `prisma` from `lib/db.ts`, this will throw a helpful error.
+export const prisma = new Proxy({}, {
+  get() {
+    throw new Error("Prisma removed: this project uses Supabase only. Replace imports of `prisma` with Supabase client calls (see lib/supabase.ts).")
+  },
+})

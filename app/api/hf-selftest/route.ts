@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { callHfModel } from "../../../lib/hf"
+import { callGorqModel } from "../../../lib/gorq"
 
 export async function GET() {
   const models = [
@@ -14,7 +14,7 @@ export async function GET() {
   const attempts: Array<{ model: string; ok: boolean; text?: string; error?: string }> = []
 
   for (const m of models) {
-    const res = await callHfModel(m, prompt, { max_new_tokens: m.includes("gpt2") ? 16 : 64 })
+    const res = await callGorqModel(m, prompt, { max_new_tokens: m.includes("gpt2") ? 16 : 64 })
     if (res.ok) {
       attempts.push({ model: m, ok: true, text: String(res.text).slice(0, 240) })
     } else {

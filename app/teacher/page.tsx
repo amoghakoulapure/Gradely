@@ -1,10 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import dynamic from "next/dynamic"
+
+const SubmissionsPreviewModal = dynamic(() => import("@/components/gradely/submissions-preview-modal"), { ssr: false })
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { GradelyHeader } from "@/components/gradely/header"
 
 type Assignment = {
   id: string
@@ -20,6 +24,9 @@ export default function TeacherPage() {
   const [description, setDescription] = useState("")
   const [language, setLanguage] = useState<Assignment["language"]>("typescript")
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewAssignmentId, setPreviewAssignmentId] = useState<string | null>(null)
 
   async function load() {
     const res = await fetch("/api/assignments")
@@ -33,24 +40,33 @@ export default function TeacherPage() {
   async function create() {
     if (!title.trim()) return
     setBusy(true)
+    setError(null)
     try {
       const res = await fetch("/api/assignments", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-demo-role": "TEACHER",
+        },
         body: JSON.stringify({ title: title.trim(), description, language }),
       })
       if (!res.ok) throw new Error("Failed")
       setTitle("")
       setDescription("")
       await load()
+    } catch (err) {
+      console.error("Create assignment failed", err)
+      setError("Unable to create assignment. Please ensure you are logged in as a teacher.")
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Teacher</h1>
+    <>
+      <GradelyHeader />
+      <main className="mx-auto w-full max-w-5xl px-4 py-6 space-y-6">
+        <h1 className="text-2xl font-semibold">Teacher</h1>
 
       <Card className="p-4 space-y-3">
         <div className="grid gap-2">
@@ -75,6 +91,7 @@ export default function TeacherPage() {
             </SelectContent>
           </Select>
         </div>
+        {error && <p className="text-sm text-red-500">{error}</p>}
         <Button onClick={create} disabled={busy}>{busy ? "Creating…" : "Create assignment"}</Button>
       </Card>
 
@@ -87,12 +104,24 @@ export default function TeacherPage() {
                 <div className="font-medium">{a.title}</div>
                 <div className="text-xs text-muted-foreground">{a.language} • {new Date(a.createdAt).toLocaleString()}</div>
               </div>
-              <a href={`/assignments/${a.id}`} className="text-sm underline">Open</a>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => { setPreviewAssignmentId(a.id); setShowPreview(true) }}
+                  className="px-3 py-1 border rounded text-sm"
+                >
+                  Preview submissions
+                </button>
+                <a href={`/assignments/${a.id}`} className="text-sm underline">Open</a>
+              </div>
             </li>
           ))}
           {!items.length && <div className="text-sm text-muted-foreground">No assignments yet.</div>}
         </ul>
       </Card>
+      {previewAssignmentId && (
+        <SubmissionsPreviewModal assignmentId={previewAssignmentId} open={showPreview} onClose={() => setShowPreview(false)} />
+      )}
     </main>
+    </>
   )
 }

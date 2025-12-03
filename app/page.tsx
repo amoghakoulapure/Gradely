@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { CodeEditor, type EditorHandle } from "@/components/gradely/code-editor"
 import { ReviewPanel, type ReviewIssue, type ReviewResult } from "@/components/gradely/review-panel"
-import { HistoryPanel, type Snapshot } from "@/components/gradely/history-panel"
 import { GradelyHeader } from "@/components/gradely/header"
 import { AIAssistant } from "@/components/gradely/ai-assistant"
+import { SparklesCore } from "@/components/ui/sparkles"
+import { OutputPanel, type OutputState } from "@/components/gradely/output-panel"
 
 type Lang = "typescript" | "javascript" | "python" | "java" | "c" | "html"
 
@@ -84,7 +85,7 @@ export default function HomePage() {
   const [assistantOpen, setAssistantOpen] = useState(false) // AI assistant panel state
   const [liveCode, setLiveCode] = useState<string>("") // live code awareness (optional)
   const editorRef = useRef<EditorHandle | null>(null)
-  const [snapshotsKey] = useState<string>("gradely:snapshots")
+  const [output, setOutput] = useState<OutputState | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -121,6 +122,7 @@ export default function HomePage() {
     setLoading(true)
     setReview(null)
     setIssues([])
+    setOutput({ status: "info", message: "Analyzing code for runtime blockers…" })
     try {
       const res = await fetch("/api/review", {
         method: "POST",
@@ -136,6 +138,23 @@ export default function HomePage() {
       setIssues(data.issues ?? [])
       // Push markers into editor
       editorRef.current?.setMarkers(data.issues ?? [])
+
+      const hasCritical = (data.issues ?? []).some((issue) => issue.severity === "error")
+      if (hasCritical) {
+        setOutput({
+          status: "error",
+          message: "Critical issues detected. Please resolve blockers before running.",
+          details: (data.issues ?? [])
+            .filter((issue) => issue.severity === "error")
+            .map((issue) => `Line ${issue.line}: ${issue.message}`),
+        })
+      } else {
+        setOutput({
+          status: "success",
+          message: "Code runs successfully without critical issues.",
+          details: data.summary ? [data.summary] : undefined,
+        })
+      }
     } catch (err) {
       // Minimal user feedback; could add toast later
       console.error("[v0] Review error:", err)
@@ -145,33 +164,14 @@ export default function HomePage() {
       })
       setIssues([])
       editorRef.current?.setMarkers([])
+      setOutput({
+        status: "error",
+        message: "Unable to analyze code right now. Please retry shortly.",
+      })
     } finally {
       setLoading(false)
     }
   }, [language])
-
-  const handleSaveSnapshot = useCallback(() => {
-    if (typeof window === "undefined") return
-    const code = editorRef.current?.getValue() ?? ""
-    const newSnap: Snapshot = {
-      id: crypto.randomUUID(),
-      language,
-      code,
-      createdAt: Date.now(),
-    }
-    const existingRaw = window.localStorage.getItem(snapshotsKey)
-    const existing: Snapshot[] = existingRaw ? JSON.parse(existingRaw) : []
-    const next = [newSnap, ...existing].slice(0, 50) // cap history
-    window.localStorage.setItem(snapshotsKey, JSON.stringify(next))
-  }, [language, snapshotsKey])
-
-  const handleLoadSnapshot = useCallback((snap: Snapshot) => {
-    setLanguage(snap.language as Lang)
-    // Give language switch a tick, then set value to editor
-    setTimeout(() => {
-      editorRef.current?.setValue(snap.code)
-    }, 0)
-  }, [])
 
   const handleClear = useCallback(() => {
     editorRef.current?.setValue("")
@@ -193,7 +193,7 @@ export default function HomePage() {
   )
 
   return (
-    <main className="min-h-dvh flex flex-col">
+    <main className="min-h-dvh flex flex-col" data-assistant-open={assistantOpen ? "true" : "false"}>
       <GradelyHeader />
 
       {/* Parallax background layer */}
@@ -202,22 +202,42 @@ export default function HomePage() {
       {/* Hero */}
       <section className="mx-auto w-full max-w-7xl px-4 pt-10 md:pt-14 pb-4 md:pb-6">
         <div className="max-w-3xl">
-          <h1 className="text-balance text-3xl md:text-5xl font-semibold reveal">
-            Instant, in‑browser AI code review.
+          <h1 className="text-balance text-3xl md:text-5xl font-semibold reveal fade-in-soft">
+            Instant, in-browser AI code review.
           </h1>
-          <p className="mt-3 md:mt-4 text-pretty text-muted-foreground reveal delay-1">
+          <p className="mt-3 md:mt-4 text-pretty text-muted-foreground reveal delay-1 fade-in-soft">
             Write code. Click Analyze. Get crisp, actionable feedback with inline markers—no setup, no extensions.
           </p>
+          <div className="mt-6 relative h-24 w-full max-w-xl">
+            <div className="absolute inset-x-12 top-3 h-px bg-gradient-to-r from-transparent via-primary/80 to-transparent blur-sm opacity-80" />
+            <div className="absolute inset-x-24 top-5 h-[3px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <SparklesCore
+                background="transparent"
+                minSize={0.4}
+                maxSize={1}
+                particleDensity={600}
+                particleColor="#a5b4fc"
+                className="w-[320px] h-20"
+              />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background/80 [mask-image:radial-gradient(200px_80px_at_center,white,transparent)]" />
+          </div>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-4 py-6 md:py-8 flex-1 flex flex-col gap-4">
-        <Card className="p-4 md:p-6 glass-surface reveal">
+        <Card className="p-4 md:p-6 glass-surface reveal workspace-card">
           {/* Toolbar row */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col md:flex-row items-stretch justify-between gap-3 toolbar-resize">
+            <div className="flex flex-1 flex-wrap items-center gap-3">
               <Select value={language} onValueChange={(v) => setLanguage(v as Lang)}>
-                <SelectTrigger className="w-[200px]">
+                <SelectTrigger
+                  className={cn(
+                    "w-[200px] transition-all duration-300",
+                    assistantOpen && "md:w-[180px]",
+                  )}
+                >
                   <SelectValue placeholder="Language" />
                 </SelectTrigger>
                 <SelectContent>
@@ -229,20 +249,45 @@ export default function HomePage() {
                   <SelectItem value="html">HTML</SelectItem>
                 </SelectContent>
               </Select>
-              <div className="text-sm text-muted-foreground hidden md:block">Write code and get instant AI review</div>
+              <div className="text-sm text-muted-foreground hidden md:block">
+                Write code and get instant AI review
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setAssistantOpen((v) => !v)}>
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 justify-end md:justify-end w-full md:w-auto toolbar-actions">
+              <Button
+                variant="outline"
+                size={assistantOpen ? "sm" : "default"}
+                onClick={() => setAssistantOpen((v) => !v)}
+                className={cn("btn-animate assistant-action-button", assistantOpen && "assistant-action-button-compact")}
+                aria-pressed={assistantOpen}
+                aria-expanded={assistantOpen}
+              >
                 {assistantOpen ? "Hide AI Assistant" : "AI Assistant"}
               </Button>
-              <Button variant="secondary" onClick={handleSaveSnapshot}>
-                Save Snapshot
-              </Button>
-              <Button variant="outline" onClick={handleClear}>
+              <Button
+                variant="outline"
+                size={assistantOpen ? "sm" : "default"}
+                onClick={handleClear}
+                className={cn("btn-animate assistant-action-button", assistantOpen && "assistant-action-button-compact")}
+              >
                 Clear
               </Button>
-              <Button onClick={handleAnalyze} disabled={loading}>
-                {loading ? "Analyzing…" : "Analyze Code"}
+              <Button
+                onClick={handleAnalyze}
+                disabled={loading}
+                size={assistantOpen ? "sm" : "default"}
+                className={cn(
+                  "btn-animate btn-ignite assistant-action-button",
+                  assistantOpen && "assistant-action-button-compact",
+                )}
+              >
+                {loading ? (
+                  <span className="inline-flex items-center">
+                    <span className="gradely-spinner" /> Analyzing…
+                  </span>
+                ) : (
+                  "Analyze Code"
+                )}
               </Button>
             </div>
           </div>
@@ -250,11 +295,14 @@ export default function HomePage() {
           {/* Main work area */}
           <div
             className={cn(
-              "mt-4 grid gap-4",
-              assistantOpen ? "grid-cols-1 lg:grid-cols-4" : "grid-cols-1 lg:grid-cols-3",
+              "mt-4 grid gap-4 panel-resize",
+              assistantOpen
+                ? "grid-cols-1 lg:grid-cols-[minmax(0,2.2fr)_minmax(320px,1fr)_minmax(300px,0.9fr)]"
+                : "grid-cols-1 lg:grid-cols-[minmax(0,2.4fr)_minmax(320px,1fr)]",
             )}
           >
-            <div className={cn(assistantOpen ? "lg:col-span-2" : "lg:col-span-2")}>
+            <div className={cn("lg:col-span-1")}
+            >
               <CodeEditor
                 key={language}
                 language={language}
@@ -264,12 +312,13 @@ export default function HomePage() {
                 onChange={setLiveCode} // live awareness (optional)
               />
             </div>
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 flex flex-col gap-4">
               <ReviewPanel
                 review={review}
                 issues={issues}
                 onJumpToLine={(line) => editorRef.current?.revealLine(line)}
               />
+              <OutputPanel output={output} />
             </div>
             {assistantOpen && (
               <div className="lg:col-span-1">
@@ -279,7 +328,6 @@ export default function HomePage() {
           </div>
         </Card>
 
-        <HistoryPanel storageKey={snapshotsKey} onLoad={handleLoadSnapshot} />
       </section>
 
       {/* Snap-scrolling features strip */}
@@ -302,9 +350,9 @@ export default function HomePage() {
         </div>
         <div className="snap-start px-4 py-8 md:py-12 bg-transparent">
           <div className="mx-auto w-full max-w-7xl glass-surface rounded-xl p-6 reveal">
-            <h2 className="text-lg font-semibold">Snapshots & history</h2>
+            <h2 className="text-lg font-semibold">AI assistant on demand</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              Save quick versions to local history and restore with a click.
+              Brainstorm fixes, request refactors, or ask follow-up questions right beside the editor.
             </p>
           </div>
         </div>
